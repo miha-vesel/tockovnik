@@ -270,10 +270,11 @@ async function dbLoad() {
   setSyncBusy();
   try {
     const rows = await sbFetch('preiskave?select=*&order=ts.asc');
-    history = rows;
+    history = Array.isArray(rows) ? rows : [];
     setSyncOk();
   } catch(e) {
     setSyncErr();
+    console.error('dbLoad error:', e);
     showToast('Napaka pri nalaganju: ' + e.message, true);
   }
 }
