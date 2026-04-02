@@ -262,7 +262,7 @@ const SB_HEADERS = {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Cont
 
 async function sbFetch(path, options={}) {
   const res = await fetch(SB_URL + '/rest/v1/' + path, {headers: SB_HEADERS, ...options});
-  if (!res.ok) { const t = await res.text(); throw new Error(t); }
+  if (!res.ok) { const t = await res.text(); console.error('Supabase error:', res.status, t); throw new Error(t); }
   return res.status === 204 ? null : res.json();
 }
 
@@ -287,7 +287,7 @@ async function dbDelete(id) {
 }
 
 async function dbDeleteAll() {
-  await sbFetch('preiskave?id=gte.0', {method:'DELETE'});
+  await sbFetch('preiskave?ts=gte.0', {method:'DELETE'});
 }
 
 function setSyncBusy() {
@@ -414,7 +414,9 @@ function similarity(a,b){
 let history = [];
 let filter = 'VSE';
 let activeMonth = new Date().getMonth()+1;
-let nextId = Date.now();
+// Use a compact ID: seconds since 2026-01-01 + counter, stays well within bigint range
+const ID_EPOCH = 1735689600; // 2026-01-01 UTC in seconds
+let nextId = Math.floor(Date.now()/1000) - ID_EPOCH;
 
 function parseMonth(d){ const m=d.match(/^\d{1,2}\.(\d{1,2})\.\d{4}/); return m?parseInt(m[1]):null; }
 function parseYear(d) { const m=d.match(/^\d{1,2}\.\d{1,2}\.(\d{4})/); return m?parseInt(m[1]):null; }
@@ -522,6 +524,12 @@ function render(){ renderStats(); renderMonthStrip(); renderHistory(); renderLis
 // ── ACTIONS ──
 async function addExam(code){
   const exam=examByCode[code]; if(!exam) return;
+  // Duplicate check: same code on same day
+  const todayStr=fmtDate().substring(0,10); // "DD.MM.YYYY"
+  const alreadyToday=history.filter(h=>h.code===code&&h.date.startsWith(todayStr));
+  if(alreadyToday.length>0){
+    if(!confirm(`"${exam.name}" je danes že ${alreadyToday.length}× vneseno. Res dodati še enkrat?`)) return;
+  }
   const entry={id:nextId++, code:exam.code, name:exam.name, points:exam.points, date:fmtDate(), ts:Date.now()};
   history.push(entry);
   activeMonth=new Date().getMonth()+1;
@@ -626,7 +634,13 @@ document.getElementById('import-text').addEventListener('input',function(){
 
 async function doImport(){
   const lines=document.getElementById('import-text').value.trim().split('\n').filter(l=>l.trim());
-  const toInsert=[];
+  const toInsert=[], skipped=[];
+
+  // Build a set of existing "datePrefix|code" keys for fast duplicate lookup
+  const existingKeys=new Set(history.map(h=>{
+    const dp=h.date.substring(0,10); return dp+'|'+h.code;
+  }));
+
   lines.forEach(line=>{
     const parts=line.split(/\t+/);
     let dateStr=null,namePart='';
@@ -636,27 +650,37 @@ async function doImport(){
     const exam=findExam(namePart);
     if(exam){
       if(!dateStr){const n=new Date();dateStr=`${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;}
-      toInsert.push({id:nextId++,code:exam.code,name:exam.name,points:exam.points,date:dateStr,ts:Date.now()+toInsert.length});
+      const datePrefix=dateStr.substring(0,10);
+      const key=datePrefix+'|'+exam.code;
+      if(existingKeys.has(key)){
+        skipped.push(exam.name);
+      } else {
+        const entry={id:nextId++,code:exam.code,name:exam.name,points:exam.points,date:dateStr,ts:Date.now()+toInsert.length};
+        toInsert.push(entry);
+        existingKeys.add(key); // prevent duplicates within same import batch
+      }
     }
   });
-  if(!toInsert.length){showToast('Nič za uvoziti',true);return;}
+
+  if(!toInsert.length){
+    const msg=skipped.length?`Vse preiskave so že uvožene (${skipped.length} preskočenih).`:'Nič za uvoziti.';
+    showToast(msg,true); return;
+  }
 
   toInsert.forEach(e=>history.push(e));
-  if(toInsert.length>0){
-    const mo=parseMonth(toInsert[toInsert.length-1].date);
-    if(mo&&mo>=cfg.monthFrom&&mo<=cfg.monthTo) activeMonth=mo;
-  }
+  const mo=parseMonth(toInsert[toInsert.length-1].date);
+  if(mo&&mo>=cfg.monthFrom&&mo<=cfg.monthTo) activeMonth=mo;
   render(); closeImport();
 
   setSyncBusy();
   try {
-    // Insert in batches of 50
     for(let i=0;i<toInsert.length;i+=50){
       await sbFetch('preiskave',{method:'POST',body:JSON.stringify(toInsert.slice(i,i+50))});
     }
     setSyncOk();
     const pts=toInsert.reduce((s,h)=>s+h.points,0);
-    showToast(`Dodano ${toInsert.length} preiskav · +${pts.toFixed(1)} točk`);
+    const skipMsg=skipped.length?` · ${skipped.length} preskočenih duplikatov`:'';
+    showToast(`Dodano ${toInsert.length} preiskav · +${pts.toFixed(1)} točk${skipMsg}`);
   } catch(e){
     setSyncErr();
     showToast('Napaka uvoza: '+e.message,true);
