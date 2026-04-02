@@ -636,10 +636,8 @@ async function doImport(){
   const lines=document.getElementById('import-text').value.trim().split('\n').filter(l=>l.trim());
   const toInsert=[], skipped=[];
 
-  // Build a set of existing "datePrefix|code" keys for fast duplicate lookup
-  const existingKeys=new Set(history.map(h=>{
-    const dp=h.date.substring(0,10); return dp+'|'+h.code;
-  }));
+  // Duplicate check: same exact datetime + same code (torej ista minuta + ista preiskava)
+  const existingKeys=new Set(history.map(h=>h.date.substring(0,15)+'|'+h.code));
 
   lines.forEach(line=>{
     const parts=line.split(/\t+/);
@@ -650,14 +648,13 @@ async function doImport(){
     const exam=findExam(namePart);
     if(exam){
       if(!dateStr){const n=new Date();dateStr=`${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;}
-      const datePrefix=dateStr.substring(0,10);
-      const key=datePrefix+'|'+exam.code;
+      const key=dateStr.substring(0,15)+'|'+exam.code;
       if(existingKeys.has(key)){
         skipped.push(exam.name);
       } else {
         const entry={id:nextId++,code:exam.code,name:exam.name,points:exam.points,date:dateStr,ts:Date.now()+toInsert.length};
         toInsert.push(entry);
-        existingKeys.add(key); // prevent duplicates within same import batch
+        existingKeys.add(key); // prepreči duplikate znotraj istega uvoza
       }
     }
   });
