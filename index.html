@@ -528,19 +528,19 @@ async function addExam(code){
   history.push(entry);
   activeMonth=new Date().getMonth()+1;
   render();
+  showToast(`+${exam.points.toFixed(1)} — ${exam.name}`);
   setSyncBusy();
   try {
     await dbInsert(entry);
     setSyncOk();
   } catch(e) {
-    // Check if entry was actually saved despite the error (extension interference)
-    try {
-      const check = await sbFetch(`preiskave?id=eq.${entry.id}&select=id`);
-      if(check && check.length > 0) { setSyncOk(); }
-      else { setSyncErr(); showToast('Napaka shranjevanja', true); }
-    } catch(e2) { setSyncErr(); showToast('Napaka shranjevanja', true); }
+    // Silent retry after 1s — extension sometimes interrupts first attempt
+    console.warn('Insert failed, retrying...', e.message);
+    setTimeout(async () => {
+      try { await dbInsert(entry); setSyncOk(); }
+      catch(e2) { console.error('Insert retry failed:', e2); setSyncErr(); }
+    }, 1000);
   }
-  showToast(`+${exam.points.toFixed(1)} — ${exam.name}`);
 }
 
 async function removeEntry(id){
