@@ -270,7 +270,13 @@ async function sbFetch(path, options={}) {
 async function dbLoad() {
   setSyncBusy();
   try {
-    const rows = await sbFetch('preiskave?select=*&order=ts.asc');
+    // Load tockovnik (exam list) and history in parallel
+    const [tockovnik, rows] = await Promise.all([
+      sbFetch('tockovnik?select=*&order=category.asc,name.asc'),
+      sbFetch('preiskave?select=*&order=ts.asc')
+    ]);
+    EXAMS = Array.isArray(tockovnik) ? tockovnik : [];
+    buildExamLookup();
     history = Array.isArray(rows) ? rows : [];
     setSyncOk();
   } catch(e) {
@@ -325,76 +331,7 @@ function getMonthlyTarget() {
 function saveCfg() { localStorage.setItem('rad_cfg', JSON.stringify(cfg)); }
 
 // ── EXAM DATA ──
-const EXAMS = [
-{"code":"MR20001","name":"MR CERVIKALNE HRBTENICE","points":1.0},
-{"code":"MR21001","name":"MR CERVIKALNE HRBTENICE S KS","points":1.0},
-{"code":"MR20003","name":"MR TORAKALNE HRBTENICE","points":1.0},
-{"code":"MR21003","name":"MR TORAKALNE HRBTENICE S KS","points":1.0},
-{"code":"MR20005","name":"MR LS HRBTENICE","points":1.0},
-{"code":"MR21005","name":"MR LS HRBTENICE S KS","points":1.0},
-{"code":"MR20015","name":"MR CELOTNE HRBTENICE","points":3.0},
-{"code":"MR21015","name":"MR CELOTNE HRBTENICE S KS","points":3.0},
-{"code":"MR30002","name":"MR TREBUŠNIH ORGANOV","points":2.1},
-{"code":"MR31002","name":"MR TREBUŠNIH ORGANOV S KS","points":2.1},
-{"code":"MR30003","name":"MR ABDOMNA - OSTALO","points":2.1},
-{"code":"MR31003","name":"MR ABDOMNA S KS - OSTALO","points":2.1},
-{"code":"MR30004","name":"MR ZGORNJEGA ABDOMNA","points":2.1},
-{"code":"MR31004","name":"MR ZGORNJEGA ABDOMNA S KS","points":2.1},
-{"code":"MR30005","name":"MR MEDENICE","points":2.1},
-{"code":"MR31005","name":"MR MEDENICE S KS","points":2.1},
-{"code":"MR30006","name":"MR JETER","points":2.3},
-{"code":"MR31006","name":"MR JETER S KS","points":2.3},
-{"code":"MR30008","name":"MRCP (PREGLED ŽOLČNEGA SISTEMA)","points":1.2},
-{"code":"MR30010","name":"MR MALE MEDENICE","points":2.3},
-{"code":"MR31010","name":"MR MALE MEDENICE S KS","points":2.3},
-{"code":"MR30012","name":"MR PROSTATE BREZ KS","points":2.2},
-{"code":"MR31014","name":"MR PROSTATE FUNKCIONALNA SLIKANJA S KS","points":2.2},
-{"code":"MR31015","name":"MR UROGRAFIJA S KS","points":2.1},
-{"code":"MR30013","name":"MR SEČNEGA MEHURJA BREZ KS","points":2.1},
-{"code":"MR31017","name":"MR SEČNEGA MEHURJA FUNKCIONALNA SLIKANJA S KS","points":2.1},
-{"code":"MR60013","name":"MR DINAMIČNO SLIKANJE","points":1.2},
-{"code":"CT10001","name":"CT GLAVE BREZ KS","points":1.0},
-{"code":"CT11001","name":"CT GLAVE S KS","points":1.0},
-{"code":"CT10007","name":"CT VRATU BREZ KS","points":2.0},
-{"code":"CT11007","name":"CT VRATU S KS","points":2.0},
-{"code":"CT20003","name":"CT CERVIKALNE HRBTENICE","points":1.0},
-{"code":"CT21003","name":"CT CERVIKALNE HRBTENICE S KS","points":1.0},
-{"code":"CT20004","name":"CT TORAKALNE HRBTENICE","points":1.0},
-{"code":"CT21004","name":"CT TORAKALNE HRBTENICE S KS","points":1.0},
-{"code":"CT20005","name":"CT LUMBO-SAKRALNE HRBTENICE","points":1.0},
-{"code":"CT21005","name":"CT LUMBO-SAKRALNE HRBTENICE S KS","points":1.0},
-{"code":"CT30001","name":"CT PRSNIH ORGANOV BREZ KS","points":1.5},
-{"code":"CT31001","name":"CT PRSNIH ORGANOV S KS","points":1.5},
-{"code":"CT30006","name":"CT PRSNEGA KOŠA - PLJUČ HRCT","points":1.5},
-{"code":"CT30008","name":"CT PLJUČ PROTOKOL LUNGCARE","points":1.5},
-{"code":"CT30003","name":"CT TREBUŠNIH ORGANOV BREZ KS","points":1.5},
-{"code":"CT31003","name":"CT TREBUŠNIH ORGANOV S KS","points":1.5},
-{"code":"CT30004","name":"CT ZGORNJEGA ABDOMNA BREZ KS","points":1.5},
-{"code":"CT31004","name":"CT ZGORNJEGA ABDOMNA S KS","points":1.5},
-{"code":"CT30007","name":"CT ABDOMNA BREZ KS - OSTALO","points":1.5},
-{"code":"CT31016","name":"CT ABD S KS DUAL SOURCE","points":1.5},
-{"code":"CT31010","name":"CT JETER S PORTALNIM OJAČANJEM","points":1.5},
-{"code":"CT31013","name":"CT JETER S KS – 4 FAZE","points":1.5},
-{"code":"CT31009","name":"CT UROGRAFIJA - KONTRAST","points":1.5},
-{"code":"CT30005","name":"CT MEDENIČNIH ORGANOV BREZ KS","points":1.5},
-{"code":"CT31005","name":"CT MEDENIČNIH ORGANOV S KS","points":1.5},
-{"code":"CT41005","name":"CTA PLJUČNIH ARTERIJ","points":1.4},
-// UZ
-{"code":"S0037","name":"Ultrazvočni pregled trebušnih organov","points":1.3},
-{"code":"S0038","name":"Ultrazvok mehkih tkiv","points":1.1},
-{"code":"S0039","name":"Ultrazvok mehkih tkiv vratu","points":1.1},
-{"code":"S00400","name":"Ultrazvok sklepa","points":1.1},
-{"code":"S00410","name":"Ultrazvok 2 enakih sklepov","points":2.2},
-{"code":"S0042","name":"Ultrazvok testisov - skrotuma","points":1.1},
-{"code":"S00420","name":"Ultrazvočni pregled mišično skeletnega sistema (1 regija)","points":1.1},
-{"code":"S0043","name":"Ultrazvok dimelj","points":1.1},
-{"code":"S0085","name":"UZ mehkih tkiv - Triglav","points":1.1},
-{"code":"S00446","name":"Ultrazvok sečil","points":1.1},
-{"code":"T030","name":"Telekom UZ trebušnih organov","points":1.3},
-{"code":"T032","name":"Telekom UZ trebušnih organov","points":1.3},
-{"code":"S0011","name":"UZ pregled trebušnih organov","points":1.3}
-];
-
+let EXAMS = []; // loaded from Supabase tockovnik table
 const ALIASES = {
   "MR DINAMIČNO SLIKANJE":"MR60013","MR DINAMICNO SLIKANJE":"MR60013",
   "MR JETER S KS":"MR31006","MR JETER S KONTRASTOM":"MR31006",
@@ -407,7 +344,11 @@ const ALIASES = {
 };
 
 const examByCode={}, examByName={};
-EXAMS.forEach(e=>{ examByCode[e.code]=e; examByName[normalize(e.name)]=e; });
+function buildExamLookup(){
+  Object.keys(examByCode).forEach(k=>delete examByCode[k]);
+  Object.keys(examByName).forEach(k=>delete examByName[k]);
+  EXAMS.forEach(e=>{ examByCode[e.code]=e; examByName[normalize(e.name)]=e; });
+}
 
 function normalize(s){ return s.toUpperCase().replace(/\s+/g,' ').trim().replace(/\(.*?\)/g,'').replace(/\s+/g,' ').trim(); }
 function findExam(name){
@@ -517,15 +458,8 @@ function renderHistory(){
 function renderList(){
   const q=document.getElementById('search').value.toLowerCase();
   let items=EXAMS;
-  if(filter==='HRBTENICA'){
-    const S=['MR20001','MR21001','MR20003','MR21003','MR20005','MR21005','MR20015','MR21015'];
-    items=items.filter(e=>S.includes(e.code));
-  } else if(filter==='ABDOMEN'){
-    items=items.filter(e=>e.code.startsWith('MR3')||e.code==='MR60013');
-  } else if(filter==='CT'){
-    items=items.filter(e=>e.code.startsWith('CT'));
-  } else if(filter==='UZ'){
-    items=items.filter(e=>e.code.startsWith('S')||e.code.startsWith('T'));
+  if(filter!=='VSE'){
+    items=items.filter(e=>e.category===filter);
   }
   if(q) items=items.filter(e=>e.name.toLowerCase().includes(q)||e.code.toLowerCase().includes(q));
   document.getElementById('result-count').textContent=`${items.length} preiskav`;
@@ -713,7 +647,6 @@ function showToast(msg,err=false){
 }
 
 // ── INIT ──
-renderList();
 dbLoad().then(()=>render());
 </script>
 </body>
