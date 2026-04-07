@@ -533,7 +533,7 @@ function renderHistory(){
   el.innerHTML=[...filtered].sort((a,b)=>b.ts-a.ts).map(h=>`
     <div class="history-item">
       <span class="hist-date">${h.date}</span>
-      <span class="hist-name">${h.name.replace(/</g,'&lt;')}${h.patient?` <span style="color:var(--muted);font-size:10px;">· ${h.patient}</span>`:''}</span>
+      <span class="hist-name">${h.name.replace(/</g,'&lt;')}</span>
       <span class="hist-pts">+${h.points.toFixed(1)}</span>
       <button class="hist-del" onclick="removeEntry(${h.id})">×</button>
     </div>`).join('');
