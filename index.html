@@ -50,6 +50,11 @@ header h1{font-size:14px;font-weight:500;flex:1;}
 .month-bar-fill{height:100%;border-radius:2px;}
 .month-target{font-size:9px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px;}
 .month-paid{font-size:9px;color:var(--orange);font-family:'DM Mono',monospace;margin-top:1px;}
+@media print {
+  body * { visibility: hidden; }
+  #print-area, #print-area * { visibility: visible; }
+  #print-area { position: fixed; left: 0; top: 0; width: 100%; background: #fff; color: #000; padding: 20px; font-family: Arial, sans-serif; }
+}
 
 .main{display:grid;grid-template-columns:310px 1fr;flex:1;overflow:hidden;}
 .panel-left{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
@@ -199,6 +204,7 @@ header h1{font-size:14px;font-weight:500;flex:1;}
 
 <div class="import-bar">
   <span>💡 Klikni preiskavo za dodajanje · za masovni uvoz →</span>
+  <button class="btn-import" onclick="openReport()">📄 Izvozi poročilo</button>
   <button class="btn-import" onclick="openImport()">📋 Uvozi seznam preiskav</button>
 </div>
 
@@ -240,6 +246,38 @@ header h1{font-size:14px;font-weight:500;flex:1;}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeSettings()">Prekliči</button>
       <button class="btn btn-primary" onclick="saveSettings()">Shrani</button>
+    </div>
+  </div>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="modal-report">
+  <div class="modal" style="width:560px;">
+    <div class="modal-header">
+      <h2>📄 Izvozi poročilo</h2>
+      <button class="modal-close" onclick="closeReport()">×</button>
+    </div>
+    <div class="modal-body">
+      <p>Izberi obseg poročila:</p>
+      <div class="cfg-row">
+        <label>Leto</label>
+        <input type="number" id="rep-year" min="2026" max="2040">
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div class="cfg-row" style="flex:1;">
+          <label>Od meseca</label>
+          <input type="number" id="rep-from" min="1" max="12">
+        </div>
+        <div class="cfg-row" style="flex:1;">
+          <label>Do meseca</label>
+          <input type="number" id="rep-to" min="1" max="12">
+        </div>
+      </div>
+      <div id="rep-preview" style="margin-top:8px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeReport()">Prekliči</button>
+      <button class="btn btn-primary" onclick="generateReport()">Natisni / Shrani PDF</button>
     </div>
   </div>
 </div>
@@ -495,7 +533,7 @@ function renderHistory(){
   el.innerHTML=[...filtered].sort((a,b)=>b.ts-a.ts).map(h=>`
     <div class="history-item">
       <span class="hist-date">${h.date}</span>
-      <span class="hist-name">${h.name.replace(/</g,'&lt;')}</span>
+      <span class="hist-name">${h.name.replace(/</g,'&lt;')}${h.patient?` <span style="color:var(--muted);font-size:10px;">· ${h.patient}</span>`:''}</span>
       <span class="hist-pts">+${h.points.toFixed(1)}</span>
       <button class="hist-del" onclick="removeEntry(${h.id})">×</button>
     </div>`).join('');
@@ -646,25 +684,27 @@ async function doImport(){
   const lines=document.getElementById('import-text').value.trim().split('\n').filter(l=>l.trim());
   const toInsert=[], skipped=[];
 
-  // Duplicate check: same exact datetime + same code (torej ista minuta + ista preiskava)
-  const existingKeys=new Set(history.map(h=>h.date.substring(0,15)+'|'+h.code));
+  // Duplicate check: same exact datetime + same code (DD.MM.YYYY HH:MM = 16 chars)
+  const existingKeys=new Set(history.map(h=>h.date.substring(0,16)+'|'+h.code));
 
   lines.forEach(line=>{
     const parts=line.split(/\t+/);
-    let dateStr=null,namePart='';
+    let dateStr=null,namePart='',patient='';
     if(parts.length>=2&&/^\d{1,2}\.\d{1,2}\.\d{4}/.test(parts[0].trim())){
-      dateStr=parts[0].trim(); namePart=parts.slice(1).join(' ').trim();
-    } else { namePart=line.trim(); }
+      dateStr=parts[0].trim();
+      namePart=parts[1]?parts[1].trim():'';
+      patient=parts[2]?parts[2].trim():'';
+    } else { namePart=parts[0].trim(); }
     const exam=findExam(namePart);
     if(exam){
       if(!dateStr){const n=new Date();dateStr=`${String(n.getDate()).padStart(2,'0')}.${String(n.getMonth()+1).padStart(2,'0')}.${n.getFullYear()}`;}
-      const key=dateStr.substring(0,15)+'|'+exam.code;
+      const key=dateStr.substring(0,16)+'|'+exam.code;
       if(existingKeys.has(key)){
         skipped.push(exam.name);
       } else {
-        const entry={id:getNextId(),code:exam.code,name:exam.name,points:exam.points,date:dateStr,ts:Date.now()+toInsert.length};
+        const entry={id:getNextId(),code:exam.code,name:exam.name,points:exam.points,date:dateStr,ts:Date.now()+toInsert.length,patient:patient};
         toInsert.push(entry);
-        existingKeys.add(key); // prepreči duplikate znotraj istega uvoza
+        existingKeys.add(key);
       }
     }
   });
@@ -702,6 +742,132 @@ function showToast(msg,err=false){
   void t.offsetWidth; // reflow
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ── REPORT ──
+function openReport(){
+  document.getElementById('rep-year').value=cfg.year;
+  document.getElementById('rep-from').value=cfg.monthFrom;
+  document.getElementById('rep-to').value=cfg.monthTo;
+  updateRepPreview();
+  document.getElementById('modal-report').classList.add('open');
+}
+function closeReport(){ document.getElementById('modal-report').classList.remove('open'); }
+
+['rep-year','rep-from','rep-to'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', updateRepPreview);
+});
+
+function updateRepPreview(){
+  const yr=parseInt(document.getElementById('rep-year').value)||cfg.year;
+  const from=parseInt(document.getElementById('rep-from').value)||1;
+  const to=parseInt(document.getElementById('rep-to').value)||12;
+  const filtered=history.filter(h=>parseYear(h.date)===yr&&parseMonth(h.date)>=from&&parseMonth(h.date)<=to);
+  const pts=filtered.reduce((s,h)=>s+h.points,0);
+  document.getElementById('rep-preview').textContent=`${filtered.length} preiskav · ${pts.toFixed(1)} točk`;
+}
+
+function generateReport(){
+  const yr=parseInt(document.getElementById('rep-year').value)||cfg.year;
+  const from=parseInt(document.getElementById('rep-from').value)||1;
+  const to=parseInt(document.getElementById('rep-to').value)||12;
+
+  const filtered=history
+    .filter(h=>parseYear(h.date)===yr&&parseMonth(h.date)>=from&&parseMonth(h.date)<=to)
+    .sort((a,b)=>a.ts-b.ts);
+
+  const totalPts=filtered.reduce((s,h)=>s+h.points,0);
+  const yt=getYearlyTarget(), mt=getMonthlyTarget();
+
+  // Group by month
+  const byMonth={};
+  filtered.forEach(h=>{
+    const mo=parseMonth(h.date);
+    if(!byMonth[mo]) byMonth[mo]=[];
+    byMonth[mo].push(h);
+  });
+
+  // Build monthly summary
+  let monthlySummary='';
+  Object.keys(byMonth).sort((a,b)=>a-b).forEach(mo=>{
+    const items=byMonth[mo];
+    const moPts=items.reduce((s,h)=>s+h.points,0);
+    const moTransfer=getMonthTransfer(moPts);
+    const moPaid=Math.max(0,moPts-moTransfer);
+    monthlySummary+=`
+      <tr style="background:#f5f5f5;font-weight:bold;">
+        <td colspan="4" style="padding:6px 8px;">${MONTH_NAMES[mo]} ${yr}</td>
+        <td style="padding:6px 8px;text-align:right;">${moPts.toFixed(1)}</td>
+        <td style="padding:6px 8px;text-align:right;color:#1a7a3a;">${moTransfer.toFixed(1)}</td>
+        <td style="padding:6px 8px;text-align:right;color:#b35a00;">${moPaid>0?moPaid.toFixed(1):''}</td>
+      </tr>`;
+    items.forEach(h=>{
+      monthlySummary+=`
+      <tr>
+        <td style="padding:4px 8px;font-size:12px;">${h.date}</td>
+        <td style="padding:4px 8px;font-size:12px;">${h.code}</td>
+        <td style="padding:4px 8px;font-size:12px;">${h.name}</td>
+        <td style="padding:4px 8px;font-size:12px;">${h.patient||''}</td>
+        <td style="padding:4px 8px;font-size:12px;text-align:right;">${h.points.toFixed(1)}</td>
+        <td></td><td></td>
+      </tr>`;
+    });
+  });
+
+  const yearlyTransfer=Object.values(byMonth).reduce((s,items)=>{
+    const moPts=items.reduce((ss,h)=>ss+h.points,0);
+    return s+getMonthTransfer(moPts);
+  },0);
+  const yearlyPaid=Math.max(0,totalPts-yearlyTransfer);
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Poročilo ${yr} — Dr. Radiolog</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:20px;}
+    h1{font-size:18px;margin-bottom:4px;}
+    h2{font-size:13px;font-weight:normal;color:#555;margin-bottom:20px;}
+    .summary{display:flex;gap:30px;margin-bottom:24px;padding:12px 16px;background:#f5f5f5;border-radius:6px;}
+    .sum-block{display:flex;flex-direction:column;gap:2px;}
+    .sum-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#777;}
+    .sum-value{font-size:20px;font-weight:bold;color:#1a3a7a;}
+    .sum-value.green{color:#1a7a3a;}
+    table{width:100%;border-collapse:collapse;}
+    th{background:#1a3a7a;color:#fff;padding:6px 8px;text-align:left;font-size:12px;}
+    tr:nth-child(even){background:#fafafa;}
+    td{border-bottom:1px solid #eee;}
+    @media print{@page{margin:15mm;}}
+  </style></head><body>
+  <h1>Poročilo o opravljenih preiskavah</h1>
+  <h2>${MONTH_NAMES[from]}–${MONTH_NAMES[to]} ${yr}</h2>
+  <div class="summary">
+    <div class="sum-block"><div class="sum-label">Skupaj preiskav</div><div class="sum-value">${filtered.length}</div></div>
+    <div class="sum-block"><div class="sum-label">Skupaj točk</div><div class="sum-value">${totalPts.toFixed(1)}</div></div>
+    <div class="sum-block"><div class="sum-label">V letni seštevek</div><div class="sum-value green">${yearlyTransfer.toFixed(1)}</div></div>
+    ${yearlyPaid>0?`<div class="sum-block"><div class="sum-label">Izplačano mesečno</div><div class="sum-value" style="color:#b35a00;">${yearlyPaid.toFixed(1)}</div></div>`:''}
+    <div class="sum-block"><div class="sum-label">Letni cilj</div><div class="sum-value" style="color:#555;">${yt.toFixed(1)}</div></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>Datum in ura</th><th>Šifra</th><th>Preiskava</th><th>Pacient</th>
+      <th style="text-align:right;">Točke</th>
+      <th style="text-align:right;">V seštevek</th>
+      <th style="text-align:right;">Izplačano</th>
+    </tr></thead>
+    <tbody>${monthlySummary}</tbody>
+    <tfoot><tr style="background:#1a3a7a;color:#fff;font-weight:bold;">
+      <td colspan="4" style="padding:8px;">SKUPAJ</td>
+      <td style="padding:8px;text-align:right;">${totalPts.toFixed(1)}</td>
+      <td style="padding:8px;text-align:right;">${yearlyTransfer.toFixed(1)}</td>
+      <td style="padding:8px;text-align:right;">${yearlyPaid>0?yearlyPaid.toFixed(1):''}</td>
+    </tr></tfoot>
+  </table>
+  <script>window.onload=()=>window.print();<\/script>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  closeReport();
 }
 
 // ── INIT ──
