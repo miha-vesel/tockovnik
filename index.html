@@ -767,6 +767,16 @@ function updateRepPreview(){
   document.getElementById('rep-preview').textContent=`${filtered.length} preiskav · ${pts.toFixed(1)} točk`;
 }
 
+const CATEGORY_ORDER = ['MR hrbtenica','MR abdomen','CT','UZ','RTG'];
+
+function getCategoryOrder(code) {
+  // Find category from EXAMS lookup
+  const exam = examByCode[code];
+  if(!exam) return 99;
+  const idx = CATEGORY_ORDER.indexOf(exam.category);
+  return idx >= 0 ? idx : 99;
+}
+
 function buildTypeTable(items) {
   // Group by exam name+code
   const byType={};
@@ -776,20 +786,36 @@ function buildTypeTable(items) {
     byType[key].count++;
     byType[key].total+=h.points;
   });
-  return Object.values(byType).sort((a,b)=>b.total-a.total);
+  return Object.values(byType).sort((a,b)=>{
+    const catA=getCategoryOrder(a.code);
+    const catB=getCategoryOrder(b.code);
+    if(catA!==catB) return catA-catB;
+    return b.total-a.total; // within same category, sort by total desc
+  });
 }
 
 function typeTableHtml(types, showTotal=true) {
   const totalCount=types.reduce((s,t)=>s+t.count,0);
   const totalPts=types.reduce((s,t)=>s+t.total,0);
-  let rows=types.map(t=>`
-    <tr>
+  let lastCat=null;
+  let rows='';
+  types.forEach(t=>{
+    const exam=examByCode[t.code];
+    const cat=exam?exam.category:'';
+    if(cat!==lastCat){
+      lastCat=cat;
+      rows+=`<tr style="background:#dde4f0;">
+        <td colspan="5" style="padding:4px 8px;font-size:11px;font-weight:bold;color:#1a3a7a;text-transform:uppercase;letter-spacing:0.05em;">${cat}</td>
+      </tr>`;
+    }
+    rows+=`<tr>
       <td style="padding:4px 8px;font-size:12px;">${t.code}</td>
       <td style="padding:4px 8px;font-size:12px;">${t.name}</td>
       <td style="padding:4px 8px;font-size:12px;text-align:right;">${t.count}×</td>
       <td style="padding:4px 8px;font-size:12px;text-align:right;">${t.points.toFixed(1)}</td>
       <td style="padding:4px 8px;font-size:12px;text-align:right;font-weight:bold;">${t.total.toFixed(1)}</td>
-    </tr>`).join('');
+    </tr>`;
+  });
   if(showTotal) rows+=`
     <tr style="background:#1a3a7a;color:#fff;font-weight:bold;">
       <td colspan="2" style="padding:6px 8px;">SKUPAJ</td>
