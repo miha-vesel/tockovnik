@@ -767,6 +767,39 @@ function updateRepPreview(){
   document.getElementById('rep-preview').textContent=`${filtered.length} preiskav · ${pts.toFixed(1)} točk`;
 }
 
+function buildTypeTable(items) {
+  // Group by exam name+code
+  const byType={};
+  items.forEach(h=>{
+    const key=h.code+'|'+h.name;
+    if(!byType[key]) byType[key]={name:h.name,code:h.code,points:h.points,count:0,total:0};
+    byType[key].count++;
+    byType[key].total+=h.points;
+  });
+  return Object.values(byType).sort((a,b)=>b.total-a.total);
+}
+
+function typeTableHtml(types, showTotal=true) {
+  const totalCount=types.reduce((s,t)=>s+t.count,0);
+  const totalPts=types.reduce((s,t)=>s+t.total,0);
+  let rows=types.map(t=>`
+    <tr>
+      <td style="padding:4px 8px;font-size:12px;">${t.code}</td>
+      <td style="padding:4px 8px;font-size:12px;">${t.name}</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right;">${t.count}×</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right;">${t.points.toFixed(1)}</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right;font-weight:bold;">${t.total.toFixed(1)}</td>
+    </tr>`).join('');
+  if(showTotal) rows+=`
+    <tr style="background:#1a3a7a;color:#fff;font-weight:bold;">
+      <td colspan="2" style="padding:6px 8px;">SKUPAJ</td>
+      <td style="padding:6px 8px;text-align:right;">${totalCount}×</td>
+      <td></td>
+      <td style="padding:6px 8px;text-align:right;">${totalPts.toFixed(1)}</td>
+    </tr>`;
+  return rows;
+}
+
 function generateReport(){
   const yr=parseInt(document.getElementById('rep-year').value)||cfg.year;
   const from=parseInt(document.getElementById('rep-from').value)||1;
@@ -777,7 +810,7 @@ function generateReport(){
     .sort((a,b)=>a.ts-b.ts);
 
   const totalPts=filtered.reduce((s,h)=>s+h.points,0);
-  const yt=getYearlyTarget(), mt=getMonthlyTarget();
+  const yt=getYearlyTarget();
 
   // Group by month
   const byMonth={};
@@ -787,80 +820,84 @@ function generateReport(){
     byMonth[mo].push(h);
   });
 
-  // Build monthly summary
-  let monthlySummary='';
-  Object.keys(byMonth).sort((a,b)=>a-b).forEach(mo=>{
-    const items=byMonth[mo];
-    const moPts=items.reduce((s,h)=>s+h.points,0);
-    const moTransfer=getMonthTransfer(moPts);
-    const moPaid=Math.max(0,moPts-moTransfer);
-    monthlySummary+=`
-      <tr style="background:#f5f5f5;font-weight:bold;">
-        <td colspan="4" style="padding:6px 8px;">${MONTH_NAMES[mo]} ${yr}</td>
-        <td style="padding:6px 8px;text-align:right;">${moPts.toFixed(1)}</td>
-        <td style="padding:6px 8px;text-align:right;color:#1a7a3a;">${moTransfer.toFixed(1)}</td>
-        <td style="padding:6px 8px;text-align:right;color:#b35a00;">${moPaid>0?moPaid.toFixed(1):''}</td>
-      </tr>`;
-    items.forEach(h=>{
-      monthlySummary+=`
-      <tr>
-        <td style="padding:4px 8px;font-size:12px;">${h.date}</td>
-        <td style="padding:4px 8px;font-size:12px;">${h.code}</td>
-        <td style="padding:4px 8px;font-size:12px;">${h.name}</td>
-        <td style="padding:4px 8px;font-size:12px;">${h.patient||''}</td>
-        <td style="padding:4px 8px;font-size:12px;text-align:right;">${h.points.toFixed(1)}</td>
-        <td></td><td></td>
-      </tr>`;
-    });
-  });
-
   const yearlyTransfer=Object.values(byMonth).reduce((s,items)=>{
     const moPts=items.reduce((ss,h)=>ss+h.points,0);
     return s+getMonthTransfer(moPts);
   },0);
   const yearlyPaid=Math.max(0,totalPts-yearlyTransfer);
 
+  // LETNI skupek po vrsti
+  const yearlyTypes=buildTypeTable(filtered);
+
+  // MESEČNI skupki
+  let monthSections='';
+  Object.keys(byMonth).sort((a,b)=>a-b).forEach(mo=>{
+    const items=byMonth[mo];
+    const moPts=items.reduce((s,h)=>s+h.points,0);
+    const moTransfer=getMonthTransfer(moPts);
+    const moPaid=Math.max(0,moPts-moTransfer);
+    const moTypes=buildTypeTable(items);
+    monthSections+=`
+    <h3 style="margin:24px 0 8px;font-size:14px;color:#1a3a7a;border-bottom:2px solid #1a3a7a;padding-bottom:4px;">
+      ${MONTH_NAMES[mo]} ${yr}
+      <span style="font-weight:normal;font-size:12px;color:#555;margin-left:12px;">
+        ${items.length} preiskav · ${moPts.toFixed(1)} točk
+        ${moPaid>0?`· <span style="color:#b35a00;">${moPaid.toFixed(1)} izplačano</span>`:''}
+      </span>
+    </h3>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:8px;">
+      <thead><tr style="background:#e8eef7;">
+        <th style="padding:5px 8px;text-align:left;font-size:11px;">Šifra</th>
+        <th style="padding:5px 8px;text-align:left;font-size:11px;">Preiskava</th>
+        <th style="padding:5px 8px;text-align:right;font-size:11px;">Število</th>
+        <th style="padding:5px 8px;text-align:right;font-size:11px;">Točke/kos</th>
+        <th style="padding:5px 8px;text-align:right;font-size:11px;">Skupaj točk</th>
+      </tr></thead>
+      <tbody>${typeTableHtml(moTypes)}</tbody>
+    </table>`;
+  });
+
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Poročilo ${yr} — Dr. Radiolog</title>
+  <title>Poročilo ${yr}</title>
   <style>
-    body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:20px;}
-    h1{font-size:18px;margin-bottom:4px;}
+    body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:24px;}
+    h1{font-size:20px;margin-bottom:4px;}
     h2{font-size:13px;font-weight:normal;color:#555;margin-bottom:20px;}
-    .summary{display:flex;gap:30px;margin-bottom:24px;padding:12px 16px;background:#f5f5f5;border-radius:6px;}
+    .summary{display:flex;gap:30px;margin-bottom:28px;padding:14px 18px;background:#f0f4ff;border-radius:6px;border:1px solid #c0cce8;}
     .sum-block{display:flex;flex-direction:column;gap:2px;}
     .sum-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:#777;}
-    .sum-value{font-size:20px;font-weight:bold;color:#1a3a7a;}
-    .sum-value.green{color:#1a7a3a;}
+    .sum-value{font-size:22px;font-weight:bold;color:#1a3a7a;}
     table{width:100%;border-collapse:collapse;}
     th{background:#1a3a7a;color:#fff;padding:6px 8px;text-align:left;font-size:12px;}
-    tr:nth-child(even){background:#fafafa;}
+    tr:nth-child(even) td{background:#fafafa;}
     td{border-bottom:1px solid #eee;}
-    @media print{@page{margin:15mm;}}
+    @media print{@page{margin:12mm;} h3{page-break-before:auto;}}
   </style></head><body>
   <h1>Poročilo o opravljenih preiskavah</h1>
-  <h2>${MONTH_NAMES[from]}–${MONTH_NAMES[to]} ${yr}</h2>
+  <h2>${from===to?MONTH_NAMES[from]:MONTH_NAMES[from]+' – '+MONTH_NAMES[to]} ${yr}</h2>
+
   <div class="summary">
     <div class="sum-block"><div class="sum-label">Skupaj preiskav</div><div class="sum-value">${filtered.length}</div></div>
     <div class="sum-block"><div class="sum-label">Skupaj točk</div><div class="sum-value">${totalPts.toFixed(1)}</div></div>
-    <div class="sum-block"><div class="sum-label">V letni seštevek</div><div class="sum-value green">${yearlyTransfer.toFixed(1)}</div></div>
+    <div class="sum-block"><div class="sum-label">V letni seštevek</div><div class="sum-value" style="color:#1a7a3a;">${yearlyTransfer.toFixed(1)}</div></div>
     ${yearlyPaid>0?`<div class="sum-block"><div class="sum-label">Izplačano mesečno</div><div class="sum-value" style="color:#b35a00;">${yearlyPaid.toFixed(1)}</div></div>`:''}
-    <div class="sum-block"><div class="sum-label">Letni cilj</div><div class="sum-value" style="color:#555;">${yt.toFixed(1)}</div></div>
+    <div class="sum-block"><div class="sum-label">Letni cilj</div><div class="sum-value" style="color:#888;">${yt.toFixed(1)}</div></div>
   </div>
-  <table>
-    <thead><tr>
-      <th>Datum in ura</th><th>Šifra</th><th>Preiskava</th><th>Pacient</th>
-      <th style="text-align:right;">Točke</th>
-      <th style="text-align:right;">V seštevek</th>
-      <th style="text-align:right;">Izplačano</th>
+
+  <h3 style="margin:0 0 8px;font-size:15px;color:#1a3a7a;border-bottom:2px solid #1a3a7a;padding-bottom:4px;">Letni pregled po vrsti preiskave</h3>
+  <table style="width:100%;border-collapse:collapse;margin-bottom:32px;">
+    <thead><tr style="background:#1a3a7a;color:#fff;">
+      <th style="padding:6px 8px;">Šifra</th>
+      <th style="padding:6px 8px;">Preiskava</th>
+      <th style="padding:6px 8px;text-align:right;">Število</th>
+      <th style="padding:6px 8px;text-align:right;">Točke/kos</th>
+      <th style="padding:6px 8px;text-align:right;">Skupaj točk</th>
     </tr></thead>
-    <tbody>${monthlySummary}</tbody>
-    <tfoot><tr style="background:#1a3a7a;color:#fff;font-weight:bold;">
-      <td colspan="4" style="padding:8px;">SKUPAJ</td>
-      <td style="padding:8px;text-align:right;">${totalPts.toFixed(1)}</td>
-      <td style="padding:8px;text-align:right;">${yearlyTransfer.toFixed(1)}</td>
-      <td style="padding:8px;text-align:right;">${yearlyPaid>0?yearlyPaid.toFixed(1):''}</td>
-    </tr></tfoot>
+    <tbody>${typeTableHtml(yearlyTypes)}</tbody>
   </table>
+
+  ${monthSections}
+
   <script>window.onload=()=>window.print();<\/script>
   </body></html>`;
 
