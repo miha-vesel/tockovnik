@@ -320,20 +320,47 @@ async function sbFetch(path, options={}) {
 async function dbLoad() {
   setSyncBusy();
   try {
-    // Load tockovnik (exam list) and history in parallel
-    const [tockovnik, rows] = await Promise.all([
+    const [tockovnik, rows, nastavitve] = await Promise.all([
       sbFetch('tockovnik?select=*&order=category.asc,name.asc'),
-      sbFetch('preiskave?select=*&order=ts.asc')
+      sbFetch('preiskave?select=*&order=ts.asc'),
+      sbFetch('nastavitve?select=*&id=eq.1')
     ]);
     EXAMS = Array.isArray(tockovnik) ? tockovnik : [];
     buildExamLookup();
     history = Array.isArray(rows) ? rows : [];
+    // Load settings from Supabase (overrides localStorage)
+    if(Array.isArray(nastavitve) && nastavitve.length > 0) {
+      const n = nastavitve[0];
+      cfg = {
+        year: n.year || DEFAULT_CFG.year,
+        monthFrom: n.month_from || DEFAULT_CFG.monthFrom,
+        monthTo: n.month_to || DEFAULT_CFG.monthTo,
+        normaPct: n.norma_pct || DEFAULT_CFG.normaPct,
+        fullNorma: n.full_norma || DEFAULT_CFG.fullNorma,
+        maxTransfer: n.max_transfer || null
+      };
+      saveCfg(); // sync to localStorage as cache
+    }
     setSyncOk();
   } catch(e) {
     setSyncErr();
     console.error('dbLoad error:', e);
     showToast('Napaka pri nalaganju: ' + e.message, true);
   }
+}
+
+async function dbSaveSettings() {
+  await sbFetch('nastavitve?id=eq.1', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      year: cfg.year,
+      month_from: cfg.monthFrom,
+      month_to: cfg.monthTo,
+      norma_pct: cfg.normaPct,
+      full_norma: cfg.fullNorma || 4800,
+      max_transfer: cfg.maxTransfer || null
+    })
+  });
 }
 
 async function dbInsert(entry) {
@@ -657,6 +684,12 @@ function saveSettings(){
   saveCfg();
   activeMonth=Math.min(Math.max(activeMonth,mFrom),mTo);
   closeSettings(); render();
+  // Save to Supabase
+  setSyncBusy();
+  dbSaveSettings().then(()=>setSyncOk()).catch(e=>{
+    console.error('Settings save error:', e);
+    setSyncErr();
+  });
   showToast(`Nastavitve shranjene · ${yr}`);
 }
 
