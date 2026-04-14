@@ -259,18 +259,14 @@ header h1{font-size:14px;font-weight:500;flex:1;}
     </div>
     <div class="modal-body">
       <p>Izberi obseg poročila:</p>
-      <div class="cfg-row">
-        <label>Leto</label>
-        <input type="number" id="rep-year" min="2026" max="2040">
-      </div>
       <div style="display:flex;gap:10px;">
         <div class="cfg-row" style="flex:1;">
-          <label>Od meseca</label>
-          <input type="number" id="rep-from" min="1" max="12">
+          <label>Od datuma</label>
+          <input type="date" id="rep-date-from" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
         </div>
         <div class="cfg-row" style="flex:1;">
-          <label>Do meseca</label>
-          <input type="number" id="rep-to" min="1" max="12">
+          <label>Do datuma</label>
+          <input type="date" id="rep-date-to" style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font-family:'DM Mono',monospace;font-size:13px;outline:none;">
         </div>
       </div>
       <div id="rep-preview" style="margin-top:8px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
@@ -779,23 +775,45 @@ function showToast(msg,err=false){
 
 // ── REPORT ──
 function openReport(){
-  document.getElementById('rep-year').value=cfg.year;
-  document.getElementById('rep-from').value=cfg.monthFrom;
-  document.getElementById('rep-to').value=cfg.monthTo;
+  // Default: first and last day of current month
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const lastDay = new Date(y, now.getMonth()+1, 0).getDate();
+  document.getElementById('rep-date-from').value = `${y}-${m}-01`;
+  document.getElementById('rep-date-to').value = `${y}-${m}-${String(lastDay).padStart(2,'0')}`;
   updateRepPreview();
   document.getElementById('modal-report').classList.add('open');
 }
 function closeReport(){ document.getElementById('modal-report').classList.remove('open'); }
 
-['rep-year','rep-from','rep-to'].forEach(id=>{
+['rep-date-from','rep-date-to'].forEach(id=>{
   document.getElementById(id).addEventListener('input', updateRepPreview);
 });
 
+function parseRepDate(dateStr) {
+  // dateStr from input type=date: "YYYY-MM-DD"
+  // history date format: "DD.MM.YYYY HH:MM"
+  if(!dateStr) return null;
+  const [y,m,d] = dateStr.split('-');
+  return new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+}
+
+function histDateToDate(hdate) {
+  // "DD.MM.YYYY HH:MM" -> Date
+  const m = hdate.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if(!m) return null;
+  return new Date(parseInt(m[3]), parseInt(m[2])-1, parseInt(m[1]));
+}
+
 function updateRepPreview(){
-  const yr=parseInt(document.getElementById('rep-year').value)||cfg.year;
-  const from=parseInt(document.getElementById('rep-from').value)||1;
-  const to=parseInt(document.getElementById('rep-to').value)||12;
-  const filtered=history.filter(h=>parseYear(h.date)===yr&&parseMonth(h.date)>=from&&parseMonth(h.date)<=to);
+  const from = parseRepDate(document.getElementById('rep-date-from').value);
+  const to = parseRepDate(document.getElementById('rep-date-to').value);
+  if(!from||!to){ document.getElementById('rep-preview').textContent=''; return; }
+  const filtered=history.filter(h=>{
+    const d=histDateToDate(h.date);
+    return d && d>=from && d<=to;
+  });
   const pts=filtered.reduce((s,h)=>s+h.points,0);
   document.getElementById('rep-preview').textContent=`${filtered.length} preiskav · ${pts.toFixed(1)} točk`;
 }
@@ -860,12 +878,17 @@ function typeTableHtml(types, showTotal=true) {
 }
 
 function generateReport(){
-  const yr=parseInt(document.getElementById('rep-year').value)||cfg.year;
-  const from=parseInt(document.getElementById('rep-from').value)||1;
-  const to=parseInt(document.getElementById('rep-to').value)||12;
+  const fromDate = parseRepDate(document.getElementById('rep-date-from').value);
+  const toDate = parseRepDate(document.getElementById('rep-date-to').value);
+  if(!fromDate||!toDate){ showToast('Izberi datume', true); return; }
+
+  // Format dates for display: DD.MM.YYYY
+  const fmtD = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+  const fromLabel = fmtD(fromDate);
+  const toLabel = fmtD(toDate);
 
   const filtered=history
-    .filter(h=>parseYear(h.date)===yr&&parseMonth(h.date)>=from&&parseMonth(h.date)<=to)
+    .filter(h=>{ const d=histDateToDate(h.date); return d&&d>=fromDate&&d<=toDate; })
     .sort((a,b)=>a.ts-b.ts);
 
   const totalPts=filtered.reduce((s,h)=>s+h.points,0);
@@ -933,7 +956,7 @@ function generateReport(){
     @media print{@page{margin:12mm;} h3{page-break-before:auto;}}
   </style></head><body>
   <h1>Poročilo o opravljenih preiskavah</h1>
-  <h2>${from===to?MONTH_NAMES[from]:MONTH_NAMES[from]+' – '+MONTH_NAMES[to]} ${yr}</h2>
+  <h2>${fromLabel} – ${toLabel}</h2>
 
   <div class="summary">
     <div class="sum-block"><div class="sum-label">Skupaj preiskav</div><div class="sum-value">${filtered.length}</div></div>
