@@ -921,7 +921,7 @@ function generateReport(){
     const moTypes=buildTypeTable(items);
     monthSections+=`
     <h3 style="margin:24px 0 8px;font-size:14px;color:#1a3a7a;border-bottom:2px solid #1a3a7a;padding-bottom:4px;">
-      ${MONTH_NAMES[mo]} ${yr}
+      ${MONTH_NAMES[mo]} ${fromDate.getFullYear()}
       <span style="font-weight:normal;font-size:12px;color:#555;margin-left:12px;">
         ${items.length} preiskav · ${moPts.toFixed(1)} točk
         ${moPaid>0?`· <span style="color:#b35a00;">${moPaid.toFixed(1)} izplačano</span>`:''}
@@ -940,7 +940,7 @@ function generateReport(){
   });
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Poročilo ${yr}</title>
+  <title>Poročilo ${fromLabel} – ${toLabel}</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:13px;color:#111;margin:0;padding:24px;}
     h1{font-size:20px;margin-bottom:4px;}
