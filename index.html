@@ -429,8 +429,13 @@ function buildExamLookup(){
 }
 
 function normalize(s){ return s.toUpperCase().replace(/\s+/g,' ').trim().replace(/\(.*?\)/g,'').replace(/\s+/g,' ').trim(); }
+// Generic RTG entry for all RTG exams
+const RTG_EXAM = {code:'RTG', name:'RTG preiskava', points:0.2, category:'RTG'};
+
 function findExam(name){
   const n=normalize(name);
+  // RTG prefix → always match as RTG preiskava, preserve original name
+  if(n.startsWith('RTG')) return {...RTG_EXAM, name:name.trim()};
   if(ALIASES[n]) return examByCode[ALIASES[n]];
   if(examByName[n]) return examByName[n];
   let best=null,bestScore=0;
