@@ -834,11 +834,14 @@ function getCategoryOrder(code) {
 }
 
 function buildTypeTable(items) {
-  // Group by exam name+code
+  // Group by exam name+code, but merge all RTG into one
   const byType={};
   items.forEach(h=>{
-    const key=h.code+'|'+h.name;
-    if(!byType[key]) byType[key]={name:h.name,code:h.code,points:h.points,count:0,total:0};
+    const isRTG = h.code==='RTG' || h.name.toUpperCase().startsWith('RTG');
+    const key = isRTG ? 'RTG|RTG preiskava' : h.code+'|'+h.name;
+    const name = isRTG ? 'RTG preiskava' : h.name;
+    const code = isRTG ? 'RTG' : h.code;
+    if(!byType[key]) byType[key]={name:name,code:code,points:h.points,count:0,total:0};
     byType[key].count++;
     byType[key].total+=h.points;
   });
