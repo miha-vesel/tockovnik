@@ -136,6 +136,86 @@ header h1{font-size:13px;font-weight:500;flex:1;}
 .toast.err{background:var(--red);}
 ::-webkit-scrollbar{width:4px;height:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 
+
+/* ── MOBILE ── */
+@media (max-width: 600px) {
+  body { overflow: auto; height: auto; }
+
+  header { padding: 8px 12px; gap: 6px; }
+  header h1 { font-size: 12px; }
+  .logo { display: none; }
+  .btn-hdr { padding: 4px 8px; font-size: 10px; }
+  .sync-status { display: none; }
+
+  .stats-row {
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px 0;
+  }
+  .stat-block {
+    padding: 0 8px;
+    border-right: 1px solid var(--border);
+  }
+  .stat-block:nth-child(3) { border-right: none; }
+  .stat-block:nth-child(4) { border-right: 1px solid var(--border); padding-left: 0; }
+  .stat-block:nth-child(6) { border-right: none; }
+  .stat-value { font-size: 15px; }
+  .progress-wrap {
+    grid-column: 1 / -1;
+    padding: 6px 0 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .cat-row { padding: 5px 12px; gap: 8px; }
+
+  .monthly-section { padding: 8px 12px; gap: 4px; }
+  .month-card { min-width: 70px; padding: 6px 8px; }
+  .month-pts { font-size: 14px; }
+
+  .main {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+    height: auto;
+  }
+  .panel-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+    height: auto;
+  }
+  .history-list {
+    overflow: visible;
+    max-height: none;
+  }
+  .history-item {
+    grid-template-columns: 100px 1fr 44px 24px;
+    gap: 6px;
+    padding: 7px 12px;
+  }
+  .hist-date { font-size: 9px; }
+  .hist-name { font-size: 11px; }
+
+  .panel-right {
+    border-top: 1px solid var(--border);
+    overflow: visible;
+    height: auto;
+  }
+  .side-body { overflow: visible; }
+
+  .import-bar {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .import-bar span { display: none; }
+  .btn-import { flex: 1; text-align: center; justify-content: center; padding: 8px; font-size: 12px; }
+
+  .modal { width: 95vw; max-height: 90vh; }
+  .toast { left: 12px; right: 12px; bottom: 70px; text-align: center; }
+}
 /* category colors */
 .cat-mr-h{background:#7c5cbf;color:#fff;}
 .cat-mr-a{background:#2f81f7;color:#fff;}
